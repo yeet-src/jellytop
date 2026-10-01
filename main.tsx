@@ -10,9 +10,10 @@
 import { login, LoginError } from "yeet:auth";
 import { Box, Text, mount, signal } from "yeet:tui";
 
-// Set while the daemon is signed out and a login code is waiting to be
-// claimed; the TUI shows it as a banner, pipe mode prints it.
-const auth = signal(null);
+// Login state. Starts as "checking" so the dashboard never flashes before we
+// know the daemon is signed in; becomes { code, url } while a code waits to
+// be claimed; null once signed in.
+const auth = signal({ checking: true });
 
 const CORES = signal(1);
 
@@ -460,12 +461,18 @@ if (typeof tty === "undefined") {
   const LoginScreen = ({ a }) => (
     <Box height="100%" width="100%">
       <Box border={{ line: "round", fg: ACCENT }} padding={[1, 2]}>
-        <Text>{badge(ACCENT, " jellytop ")}<Text fg={DIM}>{"  this host is not signed in to yeet"}</Text></Text>
-        <Text> </Text>
-        <Text><Text fg={DIM}>{"open  "}</Text><Text bold fg={FG}>{a.url}</Text></Text>
-        <Text><Text fg={DIM}>{"code  "}</Text><Text bold fg={FG}>{a.code}</Text></Text>
-        <Text> </Text>
-        <Text fg={DIM}>jellytop starts as soon as the code is claimed. Ctrl+C cancels the code.</Text>
+        {a.checking ? (
+          <Text>{badge(ACCENT, " jellytop ")}<Text fg={DIM}>{"  checking this host's yeet login…"}</Text></Text>
+        ) : (
+          <Box>
+            <Text>{badge(ACCENT, " jellytop ")}<Text fg={DIM}>{"  this host is not signed in to yeet"}</Text></Text>
+            <Text> </Text>
+            <Text><Text fg={DIM}>{"open  "}</Text><Text bold fg={FG}>{a.url}</Text></Text>
+            <Text><Text fg={DIM}>{"code  "}</Text><Text bold fg={FG}>{a.code}</Text></Text>
+            <Text> </Text>
+            <Text fg={DIM}>jellytop starts as soon as the code is claimed. Ctrl+C cancels the code.</Text>
+          </Box>
+        )}
       </Box>
     </Box>
   );
