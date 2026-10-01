@@ -458,9 +458,14 @@ if (typeof tty === "undefined") {
     </Box>
   );
 
+  // Centered with flex spacers: a column of 1fr / card / 1fr, and the card
+  // row itself padded by 1fr on each side.
   const LoginScreen = ({ a }) => (
-    <Box height="100%" width="100%">
-      <Box border={{ line: "round", fg: ACCENT }} padding={[1, 2]}>
+    <Box height="100vh" width="100vw" direction="column">
+      <Box height="1fr" />
+      <Box direction="row">
+        <Box width="1fr" />
+        <Box width="fit" border={{ line: "round", fg: ACCENT }} padding={[1, 2]}>
         {a.checking ? (
           <Text>{badge(ACCENT, " jellytop ")}<Text fg={DIM}>{"  checking this host's yeet login…"}</Text></Text>
         ) : (
@@ -473,7 +478,10 @@ if (typeof tty === "undefined") {
             <Text fg={DIM}>jellytop starts as soon as the code is claimed. Ctrl+C cancels the code.</Text>
           </Box>
         )}
+        </Box>
+        <Box width="1fr" />
       </Box>
+      <Box height="1fr" />
     </Box>
   );
 
