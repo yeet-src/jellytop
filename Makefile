@@ -13,7 +13,14 @@ CONTAINER ?= jellyfin
 PORT      ?= 9297
 SERVICE   := jellytop
 
-.PHONY: run up down dial tree
+# The daemon runs `make` with no target after fetching a repo, as a build
+# step. There is nothing to build here, so the default target must be a
+# no-op; never put `run` first.
+.DEFAULT_GOAL := all
+.PHONY: all run up down dial tree
+
+all:
+	@true
 
 run:
 	yeet run ./main.tsx -- --container $(CONTAINER)
