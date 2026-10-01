@@ -457,19 +457,21 @@ if (typeof tty === "undefined") {
     </Box>
   );
 
-  mount(() => (
+  const LoginScreen = ({ a }) => (
+    <Box height="100%" width="100%">
+      <Box border={{ line: "round", fg: ACCENT }} padding={[1, 2]}>
+        <Text>{badge(ACCENT, " jellytop ")}<Text fg={DIM}>{"  this host is not signed in to yeet"}</Text></Text>
+        <Text> </Text>
+        <Text><Text fg={DIM}>{"open  "}</Text><Text bold fg={FG}>{a.url}</Text></Text>
+        <Text><Text fg={DIM}>{"code  "}</Text><Text bold fg={FG}>{a.code}</Text></Text>
+        <Text> </Text>
+        <Text fg={DIM}>jellytop starts as soon as the code is claimed. Ctrl+C cancels the code.</Text>
+      </Box>
+    </Box>
+  );
+
+  const Dashboard = () => (
     <Box>
-      {() => {
-        const a = auth.get();
-        if (!a) return [];
-        return (
-          <Box border={{ line: "round", fg: ACCENT }} padding={[0, 1]}>
-            <Text bold fg={ACCENT}>this host is not signed in to yeet</Text>
-            <Text><Text fg={DIM}>{"open  "}</Text><Text bold fg={FG}>{a.url}</Text></Text>
-            <Text><Text fg={DIM}>{"code  "}</Text><Text bold fg={FG}>{a.code}</Text><Text fg={DIM}>{"   jellytop starts as soon as the code is claimed"}</Text></Text>
-          </Box>
-        );
-      }}
       <Box direction="row" border={frame} padding={[0, 1]}>
         <Box width="1fr">
           <Text>
@@ -556,6 +558,15 @@ if (typeof tty === "undefined") {
           return o.map((x) => <Other o={x} />);
         }}
       </Box>
+    </Box>
+  );
+
+  mount(() => (
+    <Box>
+      {() => {
+        const a = auth.get();
+        return a ? <LoginScreen a={a} /> : <Dashboard />;
+      }}
     </Box>
   ));
 }
