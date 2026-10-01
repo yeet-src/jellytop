@@ -8,7 +8,7 @@
 // No Jellyfin API, no log parsing, no agent inside the container.
 
 import { login, LoginError } from "yeet:auth";
-import { Box, Text, mount, signal } from "yeet:tui";
+import { Box, Text, signal } from "yeet:tui";
 
 // Login state. Starts as "checking" so the dashboard never flashes before we
 // know the daemon is signed in; becomes { code, url } while a code waits to
@@ -364,7 +364,9 @@ if (typeof tty === "undefined") {
     seen = s.tick;
     console.log(lines(s).join("\n") + "\n");
   }, INTERVAL);
-} else {
+}
+
+{
   const DIM = "#64748b";
   const FG = "#e2e8f0";
   const ACCENT = "#22d3ee";
@@ -576,12 +578,18 @@ if (typeof tty === "undefined") {
     </Box>
   );
 
-  mount(() => (
+  // The default export is the view; the runtime mounts it on the terminal.
+  // Login screen until the daemon is signed in, then the dashboard. Piped,
+  // there is no tty and the runtime refuses a component, so export nothing
+  // and let the text printer above do the work.
+  var view = typeof tty === "undefined" ? undefined : () => (
     <Box>
       {() => {
         const a = auth.get();
         return a ? <LoginScreen a={a} /> : <Dashboard />;
       }}
     </Box>
-  ));
+  );
 }
+
+export default view;
