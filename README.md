@@ -54,8 +54,10 @@ make dial                               # the same, on the box
 make down                               # stop and remove the service
 ```
 
-Ctrl+C detaches; the service carries on. jellytop needs the host signed in
-with `yeet login`, Jellyfin in Docker, and a kernel 6.6 or newer.
+Ctrl+C detaches; the service carries on. jellytop needs a signed-in host:
+if the daemon isn't, it shows the login link and waits, so `make dial` on a
+fresh box is also where you log in. Jellyfin has to be in Docker, and the
+kernel 6.6 or newer.
 
 ## Options
 

@@ -7,7 +7,12 @@
 // Every number here comes from the system graph: /proc, docker, hwmon.
 // No Jellyfin API, no log parsing, no agent inside the container.
 
+import { login, LoginError } from "yeet:auth";
 import { Box, Text, mount, signal } from "yeet:tui";
+
+// Set while the daemon is signed out and a login code is waiting to be
+// claimed; the TUI shows it as a banner, pipe mode prints it.
+const auth = signal(null);
 
 const CORES = signal(1);
 
@@ -156,14 +161,26 @@ const cpuHist = new Map(); // pid -> last HIST cpu samples
 const tempHist = [];
 
 async function main() {
-  // jellytop is for signed-in hosts. The token never reaches the isolate;
-  // whoami only says whether the daemon has one.
-  const me = await yeet.whoami();
-  if (me === null) {
-    console.error("jellytop: this host is not signed in to yeet. Run `yeet login` and try again.");
+  // jellytop is for signed-in hosts. login() is a no-op when the daemon
+  // already has an identity; otherwise it runs the browser flow and we show
+  // the link until someone claims it. Tokens never reach the isolate.
+  try {
+    await login({
+      onCode: ({ code, url }) => {
+        auth.set({ code, url });
+        if (typeof tty === "undefined") {
+          console.log(`jellytop: this host is not signed in to yeet.`);
+          console.log(`  open ${url}`);
+          console.log(`  code ${code}`);
+        }
+      },
+    });
+  } catch (e) {
+    console.error(e instanceof LoginError ? `jellytop: login failed (${e.code}): ${e.message}` : String(e));
     yeet.exit();
     return;
   }
+  auth.set(null);
   const id = await containerId(CONTAINER);
   const hz = await ticksPerSecond();
   startBoxWatch();
@@ -442,6 +459,17 @@ if (typeof tty === "undefined") {
 
   mount(() => (
     <Box>
+      {() => {
+        const a = auth.get();
+        if (!a) return [];
+        return (
+          <Box border={{ line: "round", fg: ACCENT }} padding={[0, 1]}>
+            <Text bold fg={ACCENT}>this host is not signed in to yeet</Text>
+            <Text><Text fg={DIM}>{"open  "}</Text><Text bold fg={FG}>{a.url}</Text></Text>
+            <Text><Text fg={DIM}>{"code  "}</Text><Text bold fg={FG}>{a.code}</Text><Text fg={DIM}>{"   jellytop starts as soon as the code is claimed"}</Text></Text>
+          </Box>
+        );
+      }}
       <Box direction="row" border={frame} padding={[0, 1]}>
         <Box width="1fr">
           <Text>
