@@ -54,8 +54,8 @@ make dial                               # the same, on the box
 make down                               # stop and remove the service
 ```
 
-Ctrl+C detaches; the service carries on. Jellyfin needs to be in Docker,
-and the kernel has to be 6.6 or newer.
+Ctrl+C detaches; the service carries on. jellytop needs the host signed in
+with `yeet login`, Jellyfin in Docker, and a kernel 6.6 or newer.
 
 ## Options
 

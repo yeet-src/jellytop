@@ -156,6 +156,14 @@ const cpuHist = new Map(); // pid -> last HIST cpu samples
 const tempHist = [];
 
 async function main() {
+  // jellytop is for signed-in hosts. The token never reaches the isolate;
+  // whoami only says whether the daemon has one.
+  const me = await yeet.whoami();
+  if (me === null) {
+    console.error("jellytop: this host is not signed in to yeet. Run `yeet login` and try again.");
+    yeet.exit();
+    return;
+  }
   const id = await containerId(CONTAINER);
   const hz = await ticksPerSecond();
   startBoxWatch();
