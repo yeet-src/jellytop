@@ -1,0 +1,22 @@
+# jellytop as a yeet service: one isolate running the tool, one web server
+# exposing its screen at ws://<host>:9297/tty for `yeet dial`.
+#
+#   yeet service import -f jellytop.service.toml
+#   yeet dial ws://127.0.0.1:9297/tty
+#
+# Change the port or bind address below if 9297 is taken or you only want
+# it on localhost.
+
+alias = "jellytop"
+restart = "always"
+enabled = true
+
+[units.app]
+isolate = "github:yeet-src/jellytop"
+# args = ["--container", "media-server", "--interval", "1000"]
+
+[units.web]
+web-server = "ws://0.0.0.0:9297/"
+
+[units.web.routes."/tty"]
+target = "app"
