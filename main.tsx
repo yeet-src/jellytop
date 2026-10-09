@@ -15,6 +15,18 @@ import { Box, Text, signal } from "yeet:tui";
 // be claimed; null once signed in.
 const auth = signal({ checking: true });
 
+// Why jellytop cannot go on, e.g. the container is not running. A TUI that
+// exits takes its stderr with it, so the screen holds the message instead.
+const fatal = signal(null);
+function die(msg) {
+  if (typeof tty === "undefined") {
+    console.error(`jellytop: ${msg}`);
+    yeet.exit();
+  } else {
+    fatal.set(msg);
+  }
+}
+
 const CORES = signal(1);
 
 const CONTAINER = String(yeet.args.container ?? "jellyfin");
@@ -162,10 +174,12 @@ const cpuHist = new Map(); // pid -> last HIST cpu samples
 const tempHist = [];
 
 async function main() {
-  // jellytop is for signed-in hosts. login() is a no-op when the daemon
-  // already has an identity; otherwise it runs the browser flow and we show
-  // the link until someone claims it. Tokens never reach the isolate.
-  try {
+  // jellytop is for signed-in hosts. Ask whoami() first: login() on a host
+  // that is already signed in can drop the daemon's answer and wait forever.
+  // Otherwise run the browser flow and show the link until someone claims
+  // it. Tokens never reach the isolate.
+  const me = await yeet.whoami().catch(() => null);
+  if (!me?.host_id) try {
     await login({
       onCode: ({ code, url }) => {
         auth.set({ code, url });
@@ -177,8 +191,7 @@ async function main() {
       },
     });
   } catch (e) {
-    console.error(e instanceof LoginError ? `jellytop: login failed (${e.code}): ${e.message}` : String(e));
-    yeet.exit();
+    die(e instanceof LoginError ? `login failed (${e.code}): ${e.message}` : String(e?.message ?? e));
     return;
   }
   auth.set(null);
@@ -350,10 +363,7 @@ function lines(s) {
   return out;
 }
 
-main().catch((e) => {
-  console.error(String(e?.message ?? e));
-  yeet.exit();
-});
+main().catch((e) => die(String(e?.message ?? e)));
 
 if (typeof tty === "undefined") {
   // pipe mode: one snapshot per tick
@@ -487,6 +497,22 @@ if (typeof tty === "undefined") {
     </Box>
   );
 
+  const ErrorScreen = ({ msg }) => (
+    <Box height="100vh" width="100vw" direction="column">
+      <Box height="1fr" />
+      <Box direction="row">
+        <Box width="1fr" />
+        <Box width="fit" border={{ line: "round", fg: BAD }} padding={[1, 2]}>
+          <Text>{badge(BAD, " jellytop ")}<Text fg={FG}>{"  " + msg}</Text></Text>
+          <Text> </Text>
+          <Text fg={DIM}>Ctrl+C exits.</Text>
+        </Box>
+        <Box width="1fr" />
+      </Box>
+      <Box height="1fr" />
+    </Box>
+  );
+
   const Dashboard = () => (
     <Box>
       <Box direction="row" border={frame} padding={[0, 1]}>
@@ -579,12 +605,15 @@ if (typeof tty === "undefined") {
   );
 
   // The default export is the view; the runtime mounts it on the terminal.
-  // Login screen until the daemon is signed in, then the dashboard. Piped,
+  // Login screen until the daemon is signed in, then the dashboard; an
+  // error screen instead of either if jellytop cannot go on. Piped,
   // there is no tty and the runtime refuses a component, so export nothing
   // and let the text printer above do the work.
   var view = typeof tty === "undefined" ? undefined : () => (
     <Box>
       {() => {
+        const err = fatal.get();
+        if (err) return <ErrorScreen msg={err} />;
         const a = auth.get();
         return a ? <LoginScreen a={a} /> : <Dashboard />;
       }}
