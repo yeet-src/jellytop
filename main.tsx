@@ -29,21 +29,61 @@ function die(msg) {
 
 const CORES = signal(1);
 
-const CONTAINER = String(yeet.args.container ?? "jellyfin");
+// The container asked for, and the one we ended up watching: the same
+// unless it was not running and someone picked another from the list.
+const WANTED = String(yeet.args.container ?? "jellyfin");
+const container = signal(WANTED);
 const INTERVAL = Number(yeet.args.interval ?? 1000);
 const RENDER_NODE = /^\/dev\/dri\/renderD\d+$/;
 
 // ---- one-shot facts -------------------------------------------------------
 
-async function containerId(name) {
+// While the container asked for is missing: the running containers to pick
+// from and the highlighted row. null otherwise.
+const pick = signal(null);
+const JELLYFIN = /jellyfin/i;
+
+async function findContainer(name) {
   const { data } = await yeet.graph.query(`{
-    docker { list_containers { id names } }
+    docker { list_containers { id names image } }
   }`);
-  const c = (data?.docker?.list_containers ?? []).find((c) =>
-    (c.names ?? []).some((n) => n.replace(/^\//, "") === name),
-  );
-  if (!c) throw new Error(`no running container named "${name}"`);
-  return c.id;
+  const all = (data?.docker?.list_containers ?? []).map((c) => ({
+    id: c.id,
+    name: (c.names?.[0] ?? c.id.slice(0, 12)).replace(/^\//, ""),
+    image: c.image ?? "",
+  }));
+  const exact = all.find((c) => c.name === name);
+  if (exact) return exact;
+  // Not under that name, but if exactly one container looks like Jellyfin,
+  // that is the one.
+  const like = all.filter((c) => JELLYFIN.test(c.name) || JELLYFIN.test(c.image));
+  if (like.length === 1) return like[0];
+  if (all.length === 0) throw new Error(`no running container named "${name}", and no running containers at all`);
+  const candidates = [...like, ...all.filter((c) => !like.includes(c))];
+  if (typeof tty === "undefined")
+    throw new Error(
+      `no running container named "${name}"; pass --container with one of: ${candidates.map((c) => c.name).join(", ")}`,
+    );
+  return chooseContainer(name, candidates);
+}
+
+// Ask on the screen. Arrows or j/k move, Enter picks.
+function chooseContainer(name, candidates) {
+  const { promise, resolve } = Promise.withResolvers();
+  pick.set({ name, candidates, at: 0 });
+  const move = (d) =>
+    pick.update((p) => ({ ...p, at: (p.at + d + p.candidates.length) % p.candidates.length }));
+  const onKey = (e) => {
+    if (e.code === "ArrowUp" || e.key === "k") move(-1);
+    else if (e.code === "ArrowDown" || e.key === "j") move(1);
+    else if (e.code === "Enter") {
+      const p = pick.get();
+      tty.off("keydown", onKey);
+      resolve(p.candidates[p.at]);
+    }
+  };
+  tty.on("keydown", onKey);
+  return promise;
 }
 
 function startBoxWatch() {
@@ -194,8 +234,13 @@ async function main() {
     die(e instanceof LoginError ? `login failed (${e.code}): ${e.message}` : String(e?.message ?? e));
     return;
   }
+  // Still "checking" until the container is settled, so the dashboard does
+  // not flash up ahead of the picker.
+  const c = await findContainer(WANTED);
+  container.set(c.name);
+  pick.set(null);
   auth.set(null);
-  const id = await containerId(CONTAINER);
+  const id = c.id;
   const hz = await ticksPerSecond();
   startBoxWatch();
   {
@@ -304,7 +349,7 @@ async function main() {
           comm: r.p.stat.comm,
           cpu: r.cpu,
           readBps: r.readBps,
-          where: r.inContainer ? CONTAINER : "host",
+          where: r.inContainer ? container.get() : "host",
         }));
 
       for (const pid of [...prev.keys()])
@@ -340,7 +385,7 @@ function boxLine() {
 function lines(s) {
   const out = [];
   const temp = s.temp == null ? "" : `   cpu pkg ${s.temp.toFixed(0)}°C`;
-  out.push(`jellytop  container=${CONTAINER}  transcodes=${s.sessions.length}${temp}`);
+  out.push(`jellytop  container=${container.get()}  transcodes=${s.sessions.length}${temp}`);
   out.push(`  ${boxLine()}`);
   out.push("");
   if (s.sessions.length === 0) {
@@ -513,13 +558,43 @@ if (typeof tty === "undefined") {
     </Box>
   );
 
+  const PickScreen = ({ p }) => (
+    <Box height="100vh" width="100vw" direction="column">
+      <Box height="1fr" />
+      <Box direction="row">
+        <Box width="1fr" />
+        <Box width="fit" border={{ line: "round", fg: WARN }} padding={[1, 2]}>
+          <Text>{badge(WARN, " jellytop ")}<Text fg={FG}>{`  couldn't find a container named "${p.name}"`}</Text></Text>
+          <Text fg={DIM}>{"which one is Jellyfin running in?"}</Text>
+          <Text> </Text>
+          {p.candidates.map((c, i) => (
+            <Box direction="row">
+              <Box width="3"><Text bold fg={ACCENT}>{i === p.at ? "▶" : ""}</Text></Box>
+              <Box width="28" break="none" overflow="ellipsis">
+                <Text bold={i === p.at} fg={i === p.at ? FG : DIM}>{c.name}</Text>
+              </Box>
+              <Box width="36" break="none" overflow="ellipsis">
+                <Text fg={JELLYFIN.test(c.image) ? ACCENT : DIM}>{c.image}</Text>
+              </Box>
+            </Box>
+          ))}
+          <Text> </Text>
+          <Text fg={DIM}>{"↑/↓ move  ·  Enter choose  ·  Ctrl+C quit"}</Text>
+          <Text fg={DIM}>{`skip this next time: --container ${p.candidates[p.at].name}`}</Text>
+        </Box>
+        <Box width="1fr" />
+      </Box>
+      <Box height="1fr" />
+    </Box>
+  );
+
   const Dashboard = () => (
     <Box>
       <Box direction="row" border={frame} padding={[0, 1]}>
         <Box width="1fr">
           <Text>
             {badge(ACCENT, " jellytop ")}
-            {k("  the kernel's view of ")}{v(CONTAINER, ACCENT)}
+            {k("  the kernel's view of ")}{v(() => container.get(), ACCENT)}
             {k("  ·  ")}{v(() => String(CORES.get()))}{k(" cores")}
           </Text>
         </Box>
@@ -605,8 +680,9 @@ if (typeof tty === "undefined") {
   );
 
   // The default export is the view; the runtime mounts it on the terminal.
-  // Login screen until the daemon is signed in, then the dashboard; an
-  // error screen instead of either if jellytop cannot go on. Piped,
+  // Login screen until the daemon is signed in, the container picker if the
+  // one asked for is not running, then the dashboard; an error screen
+  // instead of any of them if jellytop cannot go on. Piped,
   // there is no tty and the runtime refuses a component, so export nothing
   // and let the text printer above do the work.
   var view = typeof tty === "undefined" ? undefined : () => (
@@ -614,6 +690,8 @@ if (typeof tty === "undefined") {
       {() => {
         const err = fatal.get();
         if (err) return <ErrorScreen msg={err} />;
+        const p = pick.get();
+        if (p) return <PickScreen p={p} />;
         const a = auth.get();
         return a ? <LoginScreen a={a} /> : <Dashboard />;
       }}

@@ -67,6 +67,11 @@ make up PORT=9300                 # where the /tty route is served (default 9297
 yeet run github:yeet-src/jellytop -- --interval 500
 ```
 
+If no container has that name, jellytop uses the one running container
+whose name or image says `jellyfin`; failing that, it lists the running
+containers and lets you pick one with the arrow keys and Enter. Piped, it
+prints the names to choose from and exits.
+
 Piped or redirected, jellytop prints one text snapshot per tick instead of
 drawing a TUI, so `yeet run github:yeet-src/jellytop | tee jellytop.log`
 works.
