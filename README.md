@@ -56,19 +56,22 @@ make down                               # stop and remove the service
 
 Ctrl+C detaches; the service carries on. jellytop needs a signed-in host:
 if the daemon isn't, it shows the login link and waits, so `make dial` on a
-fresh box is also where you log in. Jellyfin has to be in Docker, and the
-kernel 6.6 or newer.
+fresh box is also where you log in. Jellyfin has to be in Docker or an LXC
+container (Proxmox, plain LXC, Incus), with yeet on the host, and the kernel
+6.6 or newer.
 
 ## Options
 
 ```sh
 make up CONTAINER=media-server    # the container Jellyfin runs in (default jellyfin)
+make up CONTAINER=105             # on Proxmox, an LXC is named by its vmid
 make up PORT=9300                 # where the /tty route is served (default 9297)
 yeet run github:yeet-src/jellytop -- --interval 500
 ```
 
 If no container has that name, jellytop uses the one running container
-whose name or image says `jellyfin`; failing that, it lists the running
+whose name or image says `jellyfin` (for an LXC, the one with a `jellyfin`
+process inside); failing that, it lists the running
 containers and lets you pick one with the arrow keys and Enter. Piped, it
 prints the names to choose from and exits.
 
@@ -105,7 +108,9 @@ The bottom panel lists every process over 5% CPU that is not a transcode,
 with whether it lives in the Jellyfin container or on the host.
 
 Container membership comes from the cgroup path, matched against the id the
-Docker API reports for `--container`.
+Docker API reports for `--container`, or for an LXC against its cgroup
+prefix: `lxc/<vmid>/` on Proxmox, `lxc.payload.<name>/` on plain LXC and
+Incus.
 
 ## What it does not do
 
@@ -118,7 +123,7 @@ Docker API reports for `--container`.
   that is left over.
 - **No viewer count.** Connections to a Docker-published port are NATed and
   do not appear in the host's TCP table.
-- **Jellyfin outside Docker** needs the container filter removed in
+- **Jellyfin on bare metal** needs the container filter removed in
   `main.tsx`.
 
 ## Read more

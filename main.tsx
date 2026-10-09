@@ -43,6 +43,27 @@ const RENDER_NODE = /^\/dev\/dri\/renderD\d+$/;
 const pick = signal(null);
 const JELLYFIN = /jellyfin/i;
 
+// LXC containers have no API in the graph, so they are read off the cgroup
+// paths of running processes: /lxc/<vmid>/... on Proxmox, /lxc.payload.<name>/...
+// on plain LXC and Incus. The id is that cgroup prefix, so membership is the
+// same substring test as for a Docker id.
+const LXC = /(?:^|\/)lxc(\/|\.payload\.)([^/]+)/;
+async function lxcContainers() {
+  const { data } = await yeet.graph.query(`{ procs { stat { comm } cgroups { pathname } } }`);
+  const seen = new Map();
+  for (const p of data?.procs ?? []) {
+    for (const c of p.cgroups ?? []) {
+      const m = (c.pathname ?? "").match(LXC);
+      if (!m) continue;
+      const ct = seen.get(m[2]) ?? { id: `lxc${m[1]}${m[2]}/`, name: m[2], image: "lxc" };
+      // The image column, for an LXC, says whether Jellyfin runs inside.
+      if (JELLYFIN.test(p.stat?.comm ?? "")) ct.image = "lxc (jellyfin)";
+      seen.set(m[2], ct);
+    }
+  }
+  return [...seen.values()];
+}
+
 async function findContainer(name) {
   const { data } = await yeet.graph.query(`{
     docker { list_containers { id names image } }
@@ -52,6 +73,7 @@ async function findContainer(name) {
     name: (c.names?.[0] ?? c.id.slice(0, 12)).replace(/^\//, ""),
     image: c.image ?? "",
   }));
+  all.push(...(await lxcContainers()));
   const exact = all.find((c) => c.name === name);
   if (exact) return exact;
   // Not under that name, but if exactly one container looks like Jellyfin,
@@ -159,8 +181,10 @@ async function factsFor(pid, containerId) {
       gpu: (data?.proc?.fds ?? []).some(
         (x) => x.kind === "PATH" && RENDER_NODE.test(x.path ?? ""),
       ),
+      // The trailing "/" lets an LXC prefix like lxc/101/ match the
+      // container's own cgroup without also matching lxc/1010.
       inContainer: (data?.proc?.cgroups ?? []).some((c) =>
-        c.pathname.includes(containerId),
+        `${c.pathname}/`.includes(containerId),
       ),
     };
   } catch {
@@ -208,7 +232,7 @@ const box = signal({
   load: null, memAvail: null, memTotal: null, swapUsed: null,
   ghz: null, ghzMax: null, iface: null, rxBps: 0, txBps: 0,
 });
-const VIRTUAL = /^(lo|veth|br-|docker|virbr|tailscale|wg|tun|tap|cni|flannel|kube)/;
+const VIRTUAL = /^(lo|veth|br-|docker|virbr|vmbr|fwbr|fwpr|fwln|tailscale|wg|tun|tap|cni|flannel|kube)/;
 const HIST = 24;
 const cpuHist = new Map(); // pid -> last HIST cpu samples
 const tempHist = [];

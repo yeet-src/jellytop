@@ -6,7 +6,7 @@
 #   make dial       attach to the running service's screen
 #
 # Variables:
-#   CONTAINER=jellyfin   the Docker container Jellyfin runs in
+#   CONTAINER=jellyfin   the Docker container or LXC (name or Proxmox vmid) Jellyfin runs in
 #   PORT=9297            where the service exposes its /tty route
 
 CONTAINER ?= jellyfin
